@@ -1,0 +1,135 @@
+---
+title: 'Practical Machine Learning_Course Project '
+author: "D. C. Tee"
+date: "December 19, 2015"
+output: pdf_document
+---
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data for Project  
+The training data for this project are available here:   
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>  
+The test data are available here:   
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>    
+The data for this project come from this source: <http://groupware.les.inf.puc-rio.br/har>  
+
+##Objectives 
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+##Solutions to achieve objectives
+####How I built my model
+Before the model is built, all the required packages have to be installed. And also to ensure the reproducibility of the results presented, I do "set.seed = 13579" for the random number generation.   
+The given dataset is obtained from participants where they are asked to perform one set of 10 repititions of the Unilateral Dumbbell Biceps Curl in 5 different fashions:  
+
+ + exactly according to the specification (**Class A**)
+ + throwing the elbows to the front (**Class B**)
+ + lifting the dumbbell only halfway (**Class C**)
+ + lowering the dumbbell only halfway (**Class D**)
+ + throwing the hips to the front (**Class E**)
+
+Outcome variable for the prediction model is "classe"" which is a 5 level factor variable (Class A, B, C, D and E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.  
+Exploratory data analysis is conducted to clean the data, remove empty column, NA which will help to increase the accuracy of my prediction model. 
+I test my prediction model with Decision Tree and Random Forest algorithms (more algorithms can be tested but i not going to consider all algorithms). The prediction model with highest accuracy and lowest out-of-sample error will be chosen as final model for this project.
+
+####Cross validation
+Cross-validation is primarily a way of measuring the predictive performance of a statistical model. I use **random subsampling cross-validation** on the training data to subsample the data randomly without replacement, or in other words, subsample original training data into SUBtraining data and SUBtesting data. My prediction model is trained with the SUBtraining data and then tested with the SUBtesting data before it is final verify with the provided testing data.
+
+####Expected out of sample error
+Out of sample error is the error rate we get on a new data set. It is equal to the number of misclassified observations over the total observations in the Testing data set. The higher the accuracy of the prediction model, the lower the out-of-sample error. However, we should avoid overfitting which will cause high out-of-sample error. With random subsample cross-validation applied to train my prediction model, the out-of-sample error can be minimized. The expected out-of-sample error is equal to 1 minus the accuracy in the cross-validation data.  
+
+####Reasons for my choices
+We are given a large Training dataset which contains of 19622 observations and a Testing dataset with 20 observations. The large Training dataset allows us to split it into SUBtraining and SUBtesting sample to train our model with any cross-validation method. Irrevelant features and features with all (or majority) missing and empty value will be discarded. Exclude unrelevent features can increase the accuracy of the prediction model. For the method used to train the model, I chose the **Decision Tree** and **Random Forest** algorithms due to these are popular methods and their ability to detect features that are important for classification. Decision Trees that are grown very deep tend to learn highly irregular patterns: they overfit their training sets, because they have low bias, but very high variance. Random forests are a way of averaging multiple deep decision trees, trained on different parts of the same training set, with the goal of reducing the variance. Random Forest generally greatly boosts the performance of the final model     
+
+##Load data and data cleaning
+Load the training and testing data. Make sure the data are in the working directory. Cleaning and removing missing value and irrelevant variables.
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+#coded missing value, NA and #DIV/0! as NA (standarize)
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+#removing columns with all NAs which is meaningless for prediction model
+training <- training[, colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0] 
+
+#remove unnecessary columns which is not related to the exercise conducted
+training <- training[ , -(1:7)]
+testing <- testing[ , -(1:7)]
+
+#dimension for final dataset after cleaning
+dim(training)
+dim(testing)
+```
+
+##Partition the data
+Partition the large training data set to allow cross-validation. I partitioned the training data into SUBtraining data (75%) and SUBtesting data (25%) for random subsampling for cross validation.
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+library(caret);
+library(ggplot2);
+set.seed(13579) # allow reproducibility
+inTrain<-createDataPartition(y=training$classe, p=0.75, list=FALSE) #75% SUBtraining, 25% SUBtesting
+SUBtraining <-training[inTrain, ]
+SUBtesting <-training[-inTrain, ]
+```
+
+##Prediction Model based on Decision Tree
+Here is the first prediction model based on Decision Tree algorithm
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+library(rpart);
+library(rpart.plot);
+library(rattle);
+DTmodFit<-train(classe~., method="rpart", data=SUBtraining)
+DTpredict<-predict(DTmodFit,newdata=SUBtesting)
+confusionMatrix(DTpredict,SUBtesting$classe)
+fancyRpartPlot(DTmodFit$finalModel,sub="Classification based on Decision Tree")
+```
+From the confusion matrix, we can see that the accuracy is only 0.4949 with 95% CI : (0.4808, 0.509) for Decision Tree prediction model.
+
+##Prediction Model based on Random Forest
+Here is the second prediction model based on Random Forest algorithm.
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+library(randomForest)
+RFmodFit<-train(classe~., method="rf", data=SUBtraining)
+RFpredict<-predict(RFmodFit,newdata=SUBtesting)
+confusionMatrix(RFpredict,SUBtesting$classe)
+```
+From the confusion matrix, it shows that the accuracy is improved to 0.9918 with 95% CI : (0.9889, 0.9942) for Random Forest prediction model. The expected out-of-sample error will be equal to 1-0.9918 = 0.0082.  
+
+Here I plot the Importance of each feature for each of the classe outcomes in my Random Forest prediction model.
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+importance <- varImp(RFmodFit, scale=FALSE)
+plot(importance)
+```
+
+Here is an example of the tree inside the Random Forest.  
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+getTree(RFmodFit$finalModel, 2)
+```
+
+
+##Conclusion
+Based on results, the Random Forest prediction model is far better than the Decision Trees prediction model.This is expected since Random Forest is advanced method compared to Decision Trees method.   
+
+The accuracy of the Random Forest prediction model is 0.9918 with 95% confidence interval=(0.9889, 0.9942) compared to the Decision Trees prediction model with accuracy as low as 0.4949 (confidence interval: (0.4808, 0.509)). The expected out-of-sample error from Random Forest prediction model is 0.0082 (1-accuracy of the prediction model), or 0.8%.  
+
+Due to the accuracy of the prediction model obtained from Random Forest algorithm, I will used this Random Forest prediction model to classify the given Testing dataset (20 cases) which will be presented in the next section.With an accuracy above 99% on the cross-validation data, we can expect that none of the testing samples will be missclassified.
+
+##Course Project Submission
+This part is to predict and classify the given Testing dataset and generate text files for submission to the project.
+```{r echo=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+# predict the outcome levels on the given Testing dataset using the prediction model based on Random Forest algorithm obtained previously.
+RFpredict_final <- predict(RFmodFit,newdata=testing)
+RFpredict_final
+
+# Write files for submission based on the code provided in Coursera
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(RFpredict_final)
+```
+
